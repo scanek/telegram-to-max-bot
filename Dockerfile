@@ -5,7 +5,8 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-COPY pyproject.toml .
+# Copy dependency definition and readme required by build system
+COPY pyproject.toml README.md ./
 
 RUN pip install --no-cache-dir .
 
