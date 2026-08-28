@@ -2,7 +2,7 @@ import asyncio
 from contextlib import asynccontextmanager
 import logging
 from typing import Any, Dict, Optional
-from fastapi import FastAPI, Header, HTTPException, Request, status
+from fastapi import FastAPI, Header, HTTPException, Request, status, UploadFile, File, Form
 from pydantic import BaseModel
 import httpx
 import uvicorn
@@ -173,6 +173,32 @@ async def direct_send(req: DirectSendRequest):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to send message: {str(e)}",
         )
+
+
+@app.post("/api/send-file")
+async def direct_send_file(
+    file: UploadFile = File(...),
+    caption: Optional[str] = Form(None),
+    chat_id: Optional[str] = Form(None),
+):
+    """Direct API endpoint to upload and send a file to Max with optional caption."""
+    target_chat = chat_id or settings.MAX_TARGET_CHAT_ID
+    file_bytes = await file.read()
+    file_name = file.filename or "attachment"
+    try:
+        result = await green_api_client.send_file_by_upload(
+            chat_id=target_chat,
+            file_bytes=file_bytes,
+            file_name=file_name,
+            caption=caption,
+        )
+        return {"status": "ok", "result": result}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to send file: {str(e)}",
+        )
+
 
 
 async def process_telegram_message(message: Dict[str, Any]):
