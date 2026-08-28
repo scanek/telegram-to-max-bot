@@ -177,6 +177,14 @@ async def direct_send(req: DirectSendRequest):
 
 async def process_telegram_message(message: Dict[str, Any]):
     """Main routing logic for forwarding message content to GREEN-API."""
+    from_user = message.get("from") or {}
+    user_id = from_user.get("id")
+    username = from_user.get("username")
+
+    if settings.should_ignore_user(user_id, username):
+        logger.info(f"Skipping message from ignored user ID={user_id} (@{username})")
+        return
+
     target_chat = settings.MAX_TARGET_CHAT_ID
     formatted_text = format_message_text(message)
 

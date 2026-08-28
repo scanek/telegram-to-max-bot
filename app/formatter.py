@@ -22,7 +22,7 @@ def get_sender_name(from_user: Optional[Dict[str, Any]], chat: Optional[Dict[str
         if title:
             return title
 
-    return "Неизвестный автор"
+    return "Пользователь"
 
 
 def format_forward_header(message: Dict[str, Any]) -> str:
@@ -32,22 +32,21 @@ def format_forward_header(message: Dict[str, Any]) -> str:
         origin_type = forward_origin.get("type")
         if origin_type == "user":
             user = forward_origin.get("sender_user", {})
-            return f"↪️ Переслано от: {get_sender_name(user)}\n"
+            return f"↪️ Переслано от: {get_sender_name(user)}"
         elif origin_type == "chat":
             chat = forward_origin.get("sender_chat", {})
-            return f"↪️ Переслано из: {chat.get('title', 'чата')}\n"
+            return f"↪️ Переслано из: {chat.get('title', 'чата')}"
         elif origin_type == "channel":
             chat = forward_origin.get("chat", {})
-            return f"↪️ Переслано из канала: {chat.get('title', 'канала')}\n"
+            return f"↪️ Переслано из канала: {chat.get('title', 'канала')}"
         elif origin_type == "hidden_user":
             name = forward_origin.get("sender_user_name", "Скрытый пользователь")
-            return f"↪️ Переслано от: {name}\n"
+            return f"↪️ Переслано от: {name}"
 
-    # Fallback to older telegram Bot API fields if present
     if "forward_from" in message:
-        return f"↪️ Переслано от: {get_sender_name(message['forward_from'])}\n"
+        return f"↪️ Переслано от: {get_sender_name(message['forward_from'])}"
     if "forward_from_chat" in message:
-        return f"↪️ Переслано из: {message['forward_from_chat'].get('title', 'чата')}\n"
+        return f"↪️ Переслано из: {message['forward_from_chat'].get('title', 'чата')}"
 
     return ""
 
@@ -58,33 +57,44 @@ def format_reply_header(reply_to: Optional[Dict[str, Any]]) -> str:
         return ""
 
     author = get_sender_name(reply_to.get("from"), reply_to.get("chat"))
-    text = reply_to.get("text") or reply_to.get("caption") or "[медиа/вложение]"
+    text = reply_to.get("text") or reply_to.get("caption") or "[вложение]"
     preview = text.strip().replace("\n", " ")
-    if len(preview) > 60:
-        preview = preview[:57] + "..."
+    if len(preview) > 50:
+        preview = preview[:47] + "..."
 
-    return f"💬 В ответ на ({author}: «{preview}»):\n"
+    return f"💬 В ответ на ({author}: «{preview}»)"
 
 
 def format_message_text(message: Dict[str, Any]) -> str:
-    """Builds final text to be sent to Max messenger."""
+    """Builds clean, clearly formatted text with bot branding and author name."""
     sender_name = get_sender_name(message.get("from"), message.get("chat"))
     forward_prefix = format_forward_header(message)
     reply_prefix = format_reply_header(message.get("reply_to_message"))
 
-    content = message.get("text") or message.get("caption") or ""
+    content = (message.get("text") or message.get("caption") or "").strip()
 
-    parts = []
+    header_elements = []
+    if settings.FORWARD_HEADER_PREFIX:
+        header_elements.append(settings.FORWARD_HEADER_PREFIX)
     if settings.FORWARD_SENDER_NAME:
-        parts.append(f"👤 {sender_name}:")
+        header_elements.append(f"👤 {sender_name}")
+
+    header_line = " | ".join(header_elements) if header_elements else ""
+
+    lines = []
+    if header_line:
+        lines.append(header_line)
 
     if forward_prefix:
-        parts.append(forward_prefix.strip())
+        lines.append(forward_prefix)
 
     if reply_prefix:
-        parts.append(reply_prefix.strip())
+        lines.append(reply_prefix)
+
+    if header_line or forward_prefix or reply_prefix:
+        lines.append("──────────────────────")
 
     if content:
-        parts.append(content)
+        lines.append(content)
 
-    return "\n".join(parts)
+    return "\n".join(lines)

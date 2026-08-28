@@ -1,5 +1,4 @@
 from typing import Optional, Any
-import os
 from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -76,7 +75,11 @@ class Settings(BaseSettings):
     WEBHOOK_HOST: str = Field("0.0.0.0", description="FastAPI host")
     WEBHOOK_PORT: int = Field(8008, description="FastAPI port")
 
-    # Forwarding behavior
+    # Forwarding styling and behavior
+    FORWARD_HEADER_PREFIX: str = Field(
+        "🤖 [Telegram-мост]",
+        description="Prefix header for forwarded messages",
+    )
     FORWARD_SENDER_NAME: bool = Field(
         True,
         description="Whether to prepend sender name to forwarded messages",
@@ -84,6 +87,16 @@ class Settings(BaseSettings):
     FORWARD_MEDIA: bool = Field(
         True,
         description="Whether to download and forward media attachments (photos, documents, audio)",
+    )
+
+    # Filtering (ignore own messages or specific users)
+    IGNORE_USER_IDS: str = Field(
+        "",
+        description="Comma-separated Telegram user IDs to ignore (e.g. 12345678,98765432)",
+    )
+    IGNORE_USERNAMES: str = Field(
+        "",
+        description="Comma-separated Telegram usernames to ignore without @ (e.g. my_username,bot2)",
     )
 
     @model_validator(mode="before")
@@ -104,6 +117,21 @@ class Settings(BaseSettings):
         if not v:
             return v
         return str(v).strip()
+
+    def should_ignore_user(self, user_id: Optional[int], username: Optional[str]) -> bool:
+        """Checks if the message author matches ignore filters."""
+        if user_id and self.IGNORE_USER_IDS:
+            ignored_ids = [i.strip() for i in self.IGNORE_USER_IDS.split(",") if i.strip()]
+            if str(user_id) in ignored_ids:
+                return True
+
+        if username and self.IGNORE_USERNAMES:
+            u_clean = username.lstrip("@").lower().strip()
+            ignored_names = [n.lstrip("@").lower().strip() for n in self.IGNORE_USERNAMES.split(",") if n.strip()]
+            if u_clean in ignored_names:
+                return True
+
+        return False
 
 
 settings = Settings()
