@@ -71,6 +71,47 @@ async def register_telegram_webhook():
         logger.error(f"Failed to set Telegram webhook: {e}")
 
 
+async def poll_telegram_updates():
+    """Background long-polling loop if webhook is not used."""
+    logger.info("Starting Telegram Long Polling mode (outgoing requests)...")
+    try:
+        await telegram_api_call("deleteWebhook", {"drop_pending_updates": False})
+    except Exception as e:
+        logger.warning(f"Error resetting webhook before polling: {e}")
+
+    offset = 0
+    async with httpx.AsyncClient(timeout=35.0) as client:
+        while True:
+            try:
+                url = f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/getUpdates"
+                payload = {
+                    "offset": offset,
+                    "timeout": 25,
+                    "allowed_updates": ["message", "edited_message", "channel_post"],
+                }
+                resp = await client.post(url, json=payload)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    for update in data.get("result", []):
+                        offset = update["update_id"] + 1
+                        logger.info(f"Received Update via Polling: {update.get('update_id')}")
+                        message = (
+                            update.get("message")
+                            or update.get("edited_message")
+                            or update.get("channel_post")
+                        )
+                        if message:
+                            asyncio.create_task(process_telegram_message(message))
+                else:
+                    await asyncio.sleep(2)
+            except asyncio.CancelledError:
+                logger.info("Polling loop cancelled.")
+                break
+            except Exception as e:
+                logger.error(f"Error during Telegram polling: {e}")
+                await asyncio.sleep(3)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
@@ -84,9 +125,21 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Failed to connect to Telegram Bot API with token: {e}")
 
-    await register_telegram_webhook()
+    polling_task = None
+    if settings.TELEGRAM_WEBHOOK_URL and settings.TELEGRAM_WEBHOOK_URL.strip().lower() not in ("", "polling", "none"):
+        await register_telegram_webhook()
+    else:
+        polling_task = asyncio.create_task(poll_telegram_updates())
+
     yield
+
     # Shutdown
+    if polling_task:
+        polling_task.cancel()
+        try:
+            await polling_task
+        except asyncio.CancelledError:
+            pass
     logger.info("Shutting down service...")
 
 
@@ -104,6 +157,7 @@ async def health():
         "status": "ok",
         "instance_id": settings.MAX_INSTANCE_ID,
         "target_chat_id": settings.MAX_TARGET_CHAT_ID,
+        "mode": "webhook" if settings.TELEGRAM_WEBHOOK_URL and settings.TELEGRAM_WEBHOOK_URL.strip().lower() not in ("", "polling", "none") else "polling",
     }
 
 
@@ -128,7 +182,6 @@ async def process_telegram_message(message: Dict[str, Any]):
 
     # 1. Check for Photo
     if "photo" in message and settings.FORWARD_MEDIA:
-        # Highest resolution photo is the last element
         photo = message["photo"][-1]
         file_id = photo.get("file_id")
         try:
@@ -144,7 +197,6 @@ async def process_telegram_message(message: Dict[str, Any]):
             return
         except Exception as e:
             logger.error(f"Error forwarding photo: {e}")
-            # Fallback to sending text if media fails
             if formatted_text:
                 await green_api_client.send_message(target_chat, f"{formatted_text}\n[Ошибка загрузки фото]")
             return
@@ -203,7 +255,6 @@ async def telegram_webhook(
     request: Request,
     x_telegram_bot_api_secret_token: Optional[str] = Header(None),
 ):
-    # Validate secret token if configured
     if settings.TELEGRAM_WEBHOOK_SECRET:
         if x_telegram_bot_api_secret_token != settings.TELEGRAM_WEBHOOK_SECRET:
             logger.warning("Rejected webhook request with invalid secret token")
@@ -221,7 +272,6 @@ async def telegram_webhook(
     )
 
     if message:
-        # Schedule message processing in background so webhook responds immediately to Telegram
         asyncio.create_task(process_telegram_message(message))
 
     return {"ok": True}
