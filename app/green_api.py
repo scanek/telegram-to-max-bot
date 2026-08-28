@@ -50,15 +50,18 @@ class GreenApiClient:
         caption: Optional[str] = None,
     ) -> dict:
         """Sends file (uploading bytes) to target chat via GREEN-API."""
+        import mimetypes
+        content_type = mimetypes.guess_type(file_name)[0] or "application/octet-stream"
         url = f"{self.base_url}/sendFileByUpload/{self.api_token}"
         data = {
             "chatId": chat_id,
+            "fileName": file_name,
         }
         if caption:
             data["caption"] = caption
 
         files = {
-            "file": (file_name, file_bytes),
+            "file": (file_name, file_bytes, content_type),
         }
 
         async with httpx.AsyncClient(timeout=60.0) as client:
