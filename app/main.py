@@ -197,6 +197,8 @@ async def process_telegram_message(message: Dict[str, Any]):
 
 
 @app.post("/telegram/webhook")
+@app.post("/webhook")
+@app.post("/")
 async def telegram_webhook(
     request: Request,
     x_telegram_bot_api_secret_token: Optional[str] = Header(None),
