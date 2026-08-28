@@ -1,0 +1,11 @@
+services:
+  telegram-to-max:
+    build: .
+    container_name: telegram-to-max-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "${WEBHOOK_PORT:-8008}:8008"
+    environment:
+      - PYTHONUNBUFFERED=1
