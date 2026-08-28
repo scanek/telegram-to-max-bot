@@ -1,5 +1,5 @@
 from typing import Optional
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -9,29 +9,49 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
+        populate_by_name=True,
     )
 
     # GREEN-API Settings (Max messenger)
-    MAX_INSTANCE_ID: str = Field(..., description="GREEN-API instance ID")
-    MAX_API_TOKEN: str = Field(..., description="GREEN-API API token")
+    MAX_INSTANCE_ID: str = Field(
+        ...,
+        validation_alias=AliasChoices("MAX_INSTANCE_ID", "INSTANCE_ID"),
+        description="GREEN-API instance ID",
+    )
+    MAX_API_TOKEN: str = Field(
+        ...,
+        validation_alias=AliasChoices("MAX_API_TOKEN", "API_TOKEN", "GREEN_API_TOKEN"),
+        description="GREEN-API API token",
+    )
     MAX_TARGET_CHAT_ID: str = Field(
         ...,
-        alias="МAX_TARGET_CHAT_ID",
+        validation_alias=AliasChoices(
+            "MAX_TARGET_CHAT_ID",  # Latin M
+            "МAX_TARGET_CHAT_ID",  # Cyrillic М
+            "TARGET_CHAT_ID",
+        ),
         description="Target chat ID in Max/GREEN-API (e.g. 79990000000@c.us or group ID)",
     )
     GREEN_API_HOST: str = Field(
         "https://api.green-api.com",
+        validation_alias=AliasChoices("GREEN_API_HOST", "API_HOST"),
         description="GREEN-API Host URL (or custom instance host)",
     )
 
     # Telegram Bot Settings
-    TELEGRAM_BOT_TOKEN: str = Field(..., description="Telegram bot token")
+    TELEGRAM_BOT_TOKEN: str = Field(
+        ...,
+        validation_alias=AliasChoices("TELEGRAM_BOT_TOKEN", "BOT_TOKEN"),
+        description="Telegram bot token",
+    )
     TELEGRAM_WEBHOOK_URL: str = Field(
         "",
+        validation_alias=AliasChoices("TELEGRAM_WEBHOOK_URL", "WEBHOOK_URL"),
         description="Public HTTPS URL for Telegram webhook (e.g. https://your-domain.com/telegram/webhook)",
     )
     TELEGRAM_WEBHOOK_SECRET: Optional[str] = Field(
         None,
+        validation_alias=AliasChoices("TELEGRAM_WEBHOOK_SECRET", "WEBHOOK_SECRET"),
         description="Optional secret token for validating incoming Telegram webhooks",
     )
 
@@ -54,10 +74,7 @@ class Settings(BaseSettings):
     def format_target_chat_id(cls, v: str) -> str:
         if not v:
             return v
-        v = str(v).strip()
-        # If chat ID is a standard phone or id without suffix, we can keep as is or format
-        # If it's a numeric group without @g.us / @c.us, GREEN-API usually accepts chatId as passed or with suffix
-        return v
+        return str(v).strip()
 
 
 settings = Settings()
